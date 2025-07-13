@@ -1,0 +1,62 @@
+name: PR to Develop branch
+
+on:
+  push:
+    branches:
+      - develop
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    name: Run Junit & Integration Tests
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: 'temurin'
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle') }}
+          restore-keys: ${{ runner.os }}-gradle
+      - name: Build with Gradle
+        run: ./gradlew build
+  push_to_dockerhub:
+    needs: tests
+    runs-on: ubuntu-latest
+    name: Push to Dockerhub
+    env:
+      REGISTRY: docker.io
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login to DockerHub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Generate Vars
+        id: generate_vars
+        run: |
+          # Just Tag
+          IMAGE_TAG=sha-$(echo $(git rev-parse --short HEAD) | cut -c1-7)
+          # Just Image name
+          IMAGE_NAME=proverb70/${{ github.repository }}
+          #Image ID= Name + Tag
+          IMAGE_ID=$IMAGE_NAME:$IMAGE_TAG
+          IMAGE_REPO=$REGISTRY/$IMAGE_ID
+          IMAGE=$(echo $IMAGE_REPO | tr '[:upper:]' '[:lower:]')
+          echo "Image: $IMAGE"
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+          echo "image_name=$IMAGE_NAME" >> $GITHUB_OUTPUT
+          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          file: ./Dockerfile
+          tags: ${{ steps.generate_vars.outputs.image }}
+    
