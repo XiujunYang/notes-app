@@ -1,6 +1,7 @@
 package com.example.notesapp.exception;
 
 import lombok.extern.log4j.Log4j2;
+import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -34,6 +35,12 @@ public class GlobalRestExceptionHandler {
     public ResponseEntity<String> handleANoteNotFoundException(NoteNotFoundException ex) {
         log.error("handleANoteNotFoundException:", ex);
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ex.getMessage());
+    }
+
+    @ExceptionHandler(ConcurrencyFailureException.class)
+    public ResponseEntity<String> handleConcurrencyFailureException(ConcurrencyFailureException ex) {
+        log.error("handleConcurrencyFailureException:", ex);
+        return ResponseEntity.status(HttpStatus.CONFLICT).body("there is data conflict, please try it again");
     }
 
     @ExceptionHandler(Exception.class)
