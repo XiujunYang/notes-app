@@ -14,15 +14,19 @@ A Spring Boot application for managing personal notes with RESTful API endpoints
 ## Tech Stack
 
 - Spring Boot 3.5.3
-- MongoDB
+- Spring Actuator
+- MongoDB(Spring Data JPA)
 - Java 21
 - Lombok for code generation
+- ModelMapper
 - Springdoc OpenAPI for API documentation
 - TestContainers for integration testing
+- Lucene Analyzers
 
 ## Prerequisites
 
 - Java 21 JDK
+- Docker
 - MongoDB (can be run via Docker)
 - Gradle (optional, if not using the wrapper)
 - Docker-compose (optional)
@@ -77,3 +81,11 @@ The reports will be available in `build/reports/jacoco/test/html/`
 - `DELETE /api/v1/notes/{id}` - Delete a note
 - `GET /api/v1/notes/{id}/stats` - Retrieve word statistics for a note
 - `GET /api/v1/notes/tags` - List supported tags
+
+## Actuator Endpoints
+
+Run the application and there is more endpoint available at `http://localhost:8080/actuator`
+- `/actuator` - list of all available actuator endpoints
+- `/actuator/health` - health of the service
+- `/actuator/metrics` - list of metrics
+- `/actuator/prometheus` - list metrics with Prometheus format 
