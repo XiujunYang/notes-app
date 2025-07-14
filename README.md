@@ -72,6 +72,10 @@ Generate test coverage report:
 
 The reports will be available in `build/reports/jacoco/test/html/`
 
+### 4. built image in dockerHub
+
+reference to `https://hub.docker.com/repository/docker/proverb70/notes-app/tags`, and tags is based on commit id.
+
 ## API Endpoints
 
 - `POST /api/v1/notes` - Create a new note
