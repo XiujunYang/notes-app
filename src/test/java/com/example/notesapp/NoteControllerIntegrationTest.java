@@ -29,7 +29,6 @@ import java.util.Set;
 import static org.hamcrest.Matchers.hasSize;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @ActiveProfiles("test")
@@ -99,26 +98,27 @@ public class NoteControllerIntegrationTest {
         }
     }
 
-    // TODO: query but not notes for this user or tag
-
     @ParameterizedTest
-    @CsvSource(value = {"BUSINESS,PERSONAL;0;10;2;2;1"}, delimiter = ';')
-    void getAllNotes_returns200_whenValidTags(String queryTags, String queryPage, String querySize, int contentSize, int expectedTotalElements, int expectedTotalPage) throws Exception {
-        generatedNoteInDB(Set.of(Tag.BUSINESS));
-        generatedNoteInDB(Set.of(Tag.BUSINESS, Tag.PERSONAL));
+    @CsvSource(value = {"userId1;BUSINESS,PERSONAL;0;10;3;3;1", "userId1;BUSINESS;0;1;1;2;2", "userId2;BUSINESS;0;5;1;1;1"}, delimiter = ';')
+    void getAllNotes_returns200_whenValidUserIdAndTags(String queryUserId, String queryTags, String queryPage, String querySize, int expectedContentSize, int expectedTotalElements, int expectedTotalPage) throws Exception {
+        generatedNoteInDB("userId1", Set.of(Tag.BUSINESS));
+        generatedNoteInDB("userId1", Set.of(Tag.BUSINESS, Tag.PERSONAL));
+        generatedNoteInDB("userId1", Set.of(Tag.IMPORTANT, Tag.PERSONAL));
+        generatedNoteInDB("userId2", Set.of(Tag.BUSINESS, Tag.IMPORTANT));
 
         mockMvc.perform(get("/api/v1/notes")
-                .param("userId", TEST_USER_ID)
+                        .param("userId", queryUserId)
                 .param("tags", queryTags)
                 .param("page", queryPage)
                 .param("size", querySize)
                 .contentType(MediaType.APPLICATION_JSON_VALUE))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("content").isArray()).andExpect(jsonPath("content", hasSize(contentSize)))
-            .andExpect(jsonPath("pageable.pageNumber").value(0))
-            .andExpect(jsonPath("pageable.pageSize").value(querySize))
-            .andExpect(jsonPath("totalElements").value(expectedTotalElements))
-            .andExpect(jsonPath("totalPages").value(expectedTotalPage)).andDo(print());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("content").isArray()).andExpect(jsonPath("content", hasSize(expectedContentSize)))
+                .andExpect(jsonPath("pageable.pageNumber").value(queryPage))
+                .andExpect(jsonPath("pageable.pageSize").value(querySize))
+                .andExpect(jsonPath("numberOfElements").value(expectedContentSize))
+                .andExpect(jsonPath("totalElements").value(expectedTotalElements))
+                .andExpect(jsonPath("totalPages").value(expectedTotalPage));
     }
 
     @Test
@@ -181,7 +181,7 @@ public class NoteControllerIntegrationTest {
 
     @Test
     void getStatsByNote_return200_whenNoteIsValid() throws Exception {
-        String noteId = generatedNoteInDB("In common, Stats that used in there is a most common of stats way, it is sorted by common way. ", Set.of(Tag.IMPORTANT));
+        String noteId = generatedNoteInDB(TEST_USER_ID, "In common, Stats that used in there is a most common of stats way, it is sorted by common way. ", Set.of(Tag.IMPORTANT));
         MvcResult result = mockMvc.perform(get("/api/v1/notes/{id}/stats", noteId).contentType(MediaType.APPLICATION_JSON_VALUE))
                 .andExpect(status().isOk()).andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.length()").value(6)).andReturn();
@@ -223,11 +223,11 @@ public class NoteControllerIntegrationTest {
     /**
      * return noteId
      */
-    private String generatedNoteInDB(String content, Set<Tag> tags) {
+    private String generatedNoteInDB(String userId, String content, Set<Tag> tags) {
         try {
             String tagsJsonStr = objectMapper.writeValueAsString(tags);
             MvcResult result = mockMvc.perform(post("/api/v1/notes")
-                            .param("userId", TEST_USER_ID)
+                            .param("userId", userId)
                             .contentType(MediaType.APPLICATION_JSON_VALUE)
                             .content("{\"title\":\"Updated Note\",\"content\":\"" + content + "\",\"tags\":" + tagsJsonStr + "}")
                     )
@@ -240,11 +240,15 @@ public class NoteControllerIntegrationTest {
         return null;
     }
 
+    private String generatedNoteInDB(String userId, Set<Tag> tags) {
+        return generatedNoteInDB(userId, "This is a test note", tags);
+    }
+
     private String generatedNoteInDB(Set<Tag> tags) {
-        return generatedNoteInDB("This is a test note", tags);
+        return generatedNoteInDB(TEST_USER_ID, "This is a test note", tags);
     }
 
     private String generatedNoteInDB() {
-        return generatedNoteInDB("This is a test note", Set.of());
+        return generatedNoteInDB(TEST_USER_ID, "This is a test note", Set.of());
     }
 }

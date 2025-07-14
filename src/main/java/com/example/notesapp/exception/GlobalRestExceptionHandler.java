@@ -26,17 +26,19 @@ public class GlobalRestExceptionHandler {
             IllegalArgumentException.class,
             MethodArgumentNotValidException.class})
     public ResponseEntity<String> handleInvalidException(Exception ex) {
-        log.error("handleInvalidException: ", ex);
+        log.error("handleInvalidException:", ex);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
     }
 
     @ExceptionHandler(NoteNotFoundException.class)
     public ResponseEntity<String> handleANoteNotFoundException(NoteNotFoundException ex) {
+        log.error("handleANoteNotFoundException:", ex);
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ex.getMessage());
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<String> handleAllException(Exception ex) {
+        log.error("handleAllException:", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Unexpected error：" + ex.getMessage());
     }
 }

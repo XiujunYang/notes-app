@@ -37,26 +37,26 @@ public class NoteService {
     private ModelMapper modelMapper;
 
     public NoteDTO createNote(String userId, NoteDTO noteDTO) {
-        log.debug("Creating note with userId: {}", userId);
-        log.debug("NoteDTO received: {}", noteDTO);
-        
+        log.debug("createNote with userId: {}, request: {}", userId, noteDTO);
         Note note = modelMapper.map(noteDTO, Note.class);
+        log.debug("convert to {}", note);
         note.setOwnerId(userId);
         Note savedNote = noteRepository.save(note);
-        log.debug("Saved Note: {}", savedNote);
+        log.debug("Saved Note {}", savedNote);
         return modelMapper.map(savedNote, NoteDTO.class);
     }
 
     public Page<NoteSummary> getNotesByTags(String userId, Set<Tag> tags, int page, int pageSize) {
         Pageable pageable = PageRequest.of(page, pageSize, Sort.by(Sort.Order.desc("updatedAt"), Sort.Order.asc("title")));
         Page<NoteSummary> notePage;
-        log.debug("getNotesByTags {} ownerId {} page {} pageSize {}", tags, userId, page, pageSize);
+        log.debug("getNotesByTags {} userId {} page {} pageSize {}", tags, userId, page, pageSize);
         if (ObjectUtils.isEmpty(tags)) {
             notePage = noteRepository.findByOwnerId(userId, pageable);
         } else {
             notePage = noteRepository.findByOwnerIdAndTagsIn(userId, tags, pageable);
         }
-        log.info("getNotesByTags totalElements: {} totalPage: {}", notePage.getTotalElements(), notePage.getTotalPages());
+        log.info("getNotesByTags userId: {} pageNum: {} numberOfElements: {} totalElements: {} totalPage: {}",
+                userId, notePage.getNumber(), notePage.getNumberOfElements(), notePage.getTotalElements(), notePage.getTotalPages());
         List<NoteSummary> content = notePage.getContent()
                 .stream()
                 .map(note -> modelMapper.map(note, NoteSummary.class))
@@ -69,6 +69,7 @@ public class NoteService {
     }
 
     public NoteDTO updateNote(String id, NoteDTO noteDTO) {
+        log.debug("updateNote id: {} request: {}", id, noteDTO);
         Note savedNote = noteRepository.findById(id).map(note -> {
             note.setTitle(noteDTO.getTitle());
             note.setContent(noteDTO.getContent());
@@ -77,51 +78,48 @@ public class NoteService {
             }
             return note;
         }).orElseThrow(() -> new NoteNotFoundException(id));
+        log.debug("updated note {}", savedNote);
         noteRepository.save(savedNote);
         return modelMapper.map(savedNote, NoteDTO.class);
     }
 
     public void deleteNote(String id) {
+        log.debug("deleteNote id: {}", id);
         noteRepository.deleteById(id);
     }
 
     public Map<String, Integer> getNoteStats(String noteId) throws Exception {
+        log.debug("getNoteStats by noteId {}", noteId);
         Note note = noteRepository.findById(noteId).orElseThrow(() -> new NoteNotFoundException(noteId));
         if(ObjectUtils.isEmpty(note.getContent())) {
+            log.debug("the content of note is empty");
             return new LinkedHashMap<>();
         }
         byte[] contentBytes = note.getContent().getBytes();
-        InputStreamReader reader = null;
-        try {
-            reader = new InputStreamReader(new ByteArrayInputStream(contentBytes), StandardCharsets.UTF_8);
+        try (InputStreamReader reader = new InputStreamReader(new ByteArrayInputStream(contentBytes), StandardCharsets.UTF_8)) {
             return countWords(new BufferedReader(reader));
         } catch (Exception e) {
-            log.error("getNoteStats for noteId {} error:", noteId, e);
+            log.error("getNoteStats error: {}", e.getMessage());
             throw e;
-        } finally {
-            if(reader != null ) {
-                reader.close();
-            }
         }
     }
 
     private Map<String, Integer> countWords(Reader textReader) throws Exception {
         CharArraySet stopWords = EnglishAnalyzer.ENGLISH_STOP_WORDS_SET;
-        Analyzer analyzer = new StandardAnalyzer(stopWords);
-
         Map<String, Long> freq = new HashMap<>();
-        TokenStream ts = analyzer.tokenStream("field", textReader); // default: case insensitive
-        try {
+
+        try (Analyzer analyzer = new StandardAnalyzer(stopWords);
+             TokenStream ts = analyzer.tokenStream("field", textReader); // default: case insensitive
+        ) {
             CharTermAttribute termAttr = ts.addAttribute(CharTermAttribute.class);
             ts.reset();
-
             while (ts.incrementToken()) {
                 String term = termAttr.toString();
                 freq.merge(term, 1L, Long::sum);
             }
-        } finally {
-            ts.end();
-            analyzer.close();
+        } catch (Exception e) {
+            log.error("countWords error: {}", e.getMessage());
+            throw e;
         }
         return freq.entrySet().stream()
                 .sorted(Map.Entry.<String, Long>comparingByValue(Comparator.reverseOrder()))

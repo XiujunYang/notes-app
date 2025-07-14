@@ -22,10 +22,16 @@
 hs_err_pid*
 replay_pid*
 
-# Ignore Gradle build output directory
+# Ignore build output directory
 build
-.gradle/buildOutputCleanup/
-.gradle/vcs-1/
+target
+out
+
+# Gradle
+.gradle/
+gradle/
+!gradle/wrapper/
+!gradle/wrapper/**
 
 # mac
 .DS_Store
