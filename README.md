@@ -40,12 +40,12 @@ The application will be available at `http://localhost:8080`
 ### 2. Build and Run with Docker
 
 ```bash
-docker build -t notes-app .
-docker run -p 8080:8080 notes-app
+docker build -t notes-app:<tag> .
+docker run --rm -p 8080:8080 notes-app:<tag>
 ```
 or
 ```bash
-docker-compose -f up -d
+docker-compose up -d
 ```
 
 ### 3. API Documentation

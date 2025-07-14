@@ -103,6 +103,18 @@ public class NoteControllerIntegrationTest {
     }
 
     @ParameterizedTest
+    @ValueSource(strings = {"", " ", "CUSTOMIZED_TAG"})
+    void createNote_returns400_withInvalidTag(String tags) throws Exception {
+        String requestBody = "{\"title\":\"This is a title\",\"content\":\"This is a test note\",\"tags\":[\"" + tags + "\"]}";
+
+        mockMvc.perform(post("/api/v1/notes").param("userId", TEST_USER_ID)
+                        .contentType(MediaType.APPLICATION_JSON_VALUE)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.blankString())));
+    }
+
+    @ParameterizedTest
     @CsvSource(value = {"userId1;;0;2;2;3;2", // query without tags
             "userId1;;1;2;1;3;2", // query next page
             "userId1;BUSINESS,PERSONAL;0;10;3;3;1",
