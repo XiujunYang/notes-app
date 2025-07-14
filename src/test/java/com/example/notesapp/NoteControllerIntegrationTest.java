@@ -13,6 +13,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -29,13 +30,13 @@ import java.util.Set;
 import static org.hamcrest.Matchers.hasSize;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @ActiveProfiles("test")
 @SpringBootTest
 @AutoConfigureMockMvc
 @Testcontainers
+@Import(MongoRepositoryTestConfig.class)
 public class NoteControllerIntegrationTest {
     @Autowired
     private MockMvc mockMvc;
@@ -90,41 +91,62 @@ public class NoteControllerIntegrationTest {
         }
 
         if("userId".equals(missedField)) {
-            mockMvc.perform(post("/api/v1/notes").contentType(MediaType.APPLICATION_JSON_VALUE).content(requestBody)).andExpect(status().isBadRequest());
+            mockMvc.perform(post("/api/v1/notes").contentType(MediaType.APPLICATION_JSON_VALUE).content(requestBody))
+                    .andExpect(status().isBadRequest()).andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.blankString())));
         } else {
             mockMvc.perform(post("/api/v1/notes").param("userId", TEST_USER_ID)
                             .contentType(MediaType.APPLICATION_JSON_VALUE)
                             .content(requestBody))
-                    .andExpect(status().isBadRequest());
+                    .andExpect(status().isBadRequest())
+                    .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.blankString())));
         }
     }
 
-    // TODO: query but not notes for this user or tag
+    @ParameterizedTest
+    @ValueSource(strings = {"", " ", "CUSTOMIZED_TAG"})
+    void createNote_returns400_withInvalidTag(String tags) throws Exception {
+        String requestBody = "{\"title\":\"This is a title\",\"content\":\"This is a test note\",\"tags\":[\"" + tags + "\"]}";
+
+        mockMvc.perform(post("/api/v1/notes").param("userId", TEST_USER_ID)
+                        .contentType(MediaType.APPLICATION_JSON_VALUE)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.blankString())));
+    }
 
     @ParameterizedTest
-    @CsvSource(value = {"BUSINESS,PERSONAL;0;10;2;2;1"}, delimiter = ';')
-    void getAllNotes_returns200_whenValidTags(String queryTags, String queryPage, String querySize, int contentSize, int expectedTotalElements, int expectedTotalPage) throws Exception {
-        generatedNoteInDB(Set.of(Tag.BUSINESS));
-        generatedNoteInDB(Set.of(Tag.BUSINESS, Tag.PERSONAL));
+    @CsvSource(value = {"userId1;;0;2;2;3;2", // query without tags
+            "userId1;;1;2;1;3;2", // query next page
+            "userId1;BUSINESS,PERSONAL;0;10;3;3;1",
+            "userId1;BUSINESS;0;1;1;2;2",
+            "userId2;BUSINESS;0;5;1;1;1"}, delimiter = ';')
+    void getAllNotes_returns200_whenValidUserIdAndTags(String queryUserId, String queryTags, String queryPage, String querySize,
+                                                       int expectedContentSize, int expectedTotalElements, int expectedTotalPage) throws Exception {
+        generatedNoteInDB("userId1", Set.of(Tag.BUSINESS));
+        generatedNoteInDB("userId1", Set.of(Tag.BUSINESS, Tag.PERSONAL));
+        generatedNoteInDB("userId1", Set.of(Tag.IMPORTANT, Tag.PERSONAL));
+        generatedNoteInDB("userId2", Set.of(Tag.BUSINESS, Tag.IMPORTANT));
 
         mockMvc.perform(get("/api/v1/notes")
-                .param("userId", TEST_USER_ID)
+                        .param("userId", queryUserId)
                 .param("tags", queryTags)
                 .param("page", queryPage)
                 .param("size", querySize)
                 .contentType(MediaType.APPLICATION_JSON_VALUE))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("content").isArray()).andExpect(jsonPath("content", hasSize(contentSize)))
-            .andExpect(jsonPath("pageable.pageNumber").value(0))
-            .andExpect(jsonPath("pageable.pageSize").value(querySize))
-            .andExpect(jsonPath("totalElements").value(expectedTotalElements))
-            .andExpect(jsonPath("totalPages").value(expectedTotalPage)).andDo(print());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("content").isArray()).andExpect(jsonPath("content", hasSize(expectedContentSize)))
+                .andExpect(jsonPath("pageable.pageNumber").value(queryPage))
+                .andExpect(jsonPath("pageable.pageSize").value(querySize))
+                .andExpect(jsonPath("numberOfElements").value(expectedContentSize))
+                .andExpect(jsonPath("totalElements").value(expectedTotalElements))
+                .andExpect(jsonPath("totalPages").value(expectedTotalPage));
     }
 
     @Test
     void getAllNotes_return400_whenMissingUserId() throws Exception {
         mockMvc.perform(get("/api/v1/notes").contentType(MediaType.APPLICATION_JSON_VALUE))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.blankString())));
     }
 
     @Test
@@ -139,7 +161,8 @@ public class NoteControllerIntegrationTest {
     @Test
     void getGetStatsByNote_return404_whenNoteIsUnExisted() throws Exception {
         mockMvc.perform(get("/api/v1/notes/{id}", "notExistedNoteId").contentType(MediaType.APPLICATION_JSON_VALUE))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(content().string("NoteId notExistedNoteId not existed"));
     }
 
     @Test
@@ -166,6 +189,17 @@ public class NoteControllerIntegrationTest {
                 .andExpect(content().string("NoteId notExistedNoteId not existed"));
     }
 
+    @Test
+    void updateNote_return409_whenOptimisticConcurrencyOccur() throws Exception { // verify optimistic locking for mongodb
+        String noteId = generatedNoteInDB();
+        mockMvc.perform(put("/api/v1/notes/{id}", noteId)
+                        .param("userId", TEST_USER_ID)
+                        .contentType(MediaType.APPLICATION_JSON_VALUE)
+                        .content("{\"title\":\"OptimisticLockingFailed\",\"content\":\"This is a test note\",\"tags\":[\"BUSINESS\"]}")
+                )
+                .andExpect(status().isConflict()).andExpect(content().string("there is data conflict, please try it again"));
+    }
+
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     void deleteNote_returns204_whenNotMatterIfNoteIsExisted(boolean isNoteExisted) throws Exception {
@@ -181,7 +215,7 @@ public class NoteControllerIntegrationTest {
 
     @Test
     void getStatsByNote_return200_whenNoteIsValid() throws Exception {
-        String noteId = generatedNoteInDB("In common, Stats that used in there is a most common of stats way, it is sorted by common way. ", Set.of(Tag.IMPORTANT));
+        String noteId = generatedNoteInDB(TEST_USER_ID, "In common, Stats that used in there is a most common of stats way, it is sorted by common way. ", Set.of(Tag.IMPORTANT));
         MvcResult result = mockMvc.perform(get("/api/v1/notes/{id}/stats", noteId).contentType(MediaType.APPLICATION_JSON_VALUE))
                 .andExpect(status().isOk()).andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.length()").value(6)).andReturn();
@@ -223,11 +257,11 @@ public class NoteControllerIntegrationTest {
     /**
      * return noteId
      */
-    private String generatedNoteInDB(String content, Set<Tag> tags) {
+    private String generatedNoteInDB(String userId, String content, Set<Tag> tags) {
         try {
             String tagsJsonStr = objectMapper.writeValueAsString(tags);
             MvcResult result = mockMvc.perform(post("/api/v1/notes")
-                            .param("userId", TEST_USER_ID)
+                            .param("userId", userId)
                             .contentType(MediaType.APPLICATION_JSON_VALUE)
                             .content("{\"title\":\"Updated Note\",\"content\":\"" + content + "\",\"tags\":" + tagsJsonStr + "}")
                     )
@@ -240,11 +274,15 @@ public class NoteControllerIntegrationTest {
         return null;
     }
 
+    private String generatedNoteInDB(String userId, Set<Tag> tags) {
+        return generatedNoteInDB(userId, "This is a test note", tags);
+    }
+
     private String generatedNoteInDB(Set<Tag> tags) {
-        return generatedNoteInDB("This is a test note", tags);
+        return generatedNoteInDB(TEST_USER_ID, "This is a test note", tags);
     }
 
     private String generatedNoteInDB() {
-        return generatedNoteInDB("This is a test note", Set.of());
+        return generatedNoteInDB(TEST_USER_ID, "This is a test note", Set.of());
     }
 }

@@ -117,8 +117,6 @@ public class NoteController {
         return ResponseEntity.ok(updatedNote);
     }
 
-    // TODO: PATCH
-
     @Operation(
             summary = "Delete note",
             description = "Delete a note by its ID",
